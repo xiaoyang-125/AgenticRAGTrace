@@ -1,6 +1,7 @@
 import express from 'express'
 import { initData } from './data/init'
 import healthRouter from './routes/health'
+import documentsRouter from './routes/documents'
 
 const app = express()
 const PORT = 3001
@@ -10,6 +11,7 @@ app.use(express.json())
 
 // 注册路由
 app.use('/health', healthRouter)
+app.use('/api/documents', documentsRouter)
 
 // 启动时初始化 data 目录和 JSON 文件
 initData()
