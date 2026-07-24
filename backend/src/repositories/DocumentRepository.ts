@@ -54,4 +54,54 @@ export class DocumentRepository {
     fs.writeFileSync(DOCUMENTS_FILE, JSON.stringify(docs, null, 2), 'utf-8')
     return newDoc
   }
+
+  /**
+   * 更新指定文档的部分字段（不允许更改 id / createdAt）
+   *
+   * 为什么用 Partial<Omit<Document, 'id' | 'createdAt'>>：
+   * - id 是主键，改了就找不到记录了
+   * - createdAt 是不可变时间戳，不应通过业务逻辑修改
+   * - Partial 允许调用方只传需要更新的字段，其余保持不变
+   *
+   * @param id       目标文档 id
+   * @param partial  要合并的字段
+   * @returns        更新后的完整文档对象
+   * @throws         id 不存在时抛出错误（表明是调用方 bug，不应静默忽略）
+   */
+  update(
+    id: string,
+    partial: Partial<Omit<Document, 'id' | 'createdAt'>>,
+  ): Document {
+    const docs = this.findAll()
+    const index = docs.findIndex((d) => d.id === id)
+    if (index === -1) {
+      throw new Error(`[DocumentRepository] 文档不存在，id: ${id}`)
+    }
+    const updated: Document = { ...docs[index], ...partial }
+    docs[index] = updated
+    fs.writeFileSync(DOCUMENTS_FILE, JSON.stringify(docs, null, 2), 'utf-8')
+    return updated
+  }
+
+  /**
+   * 删除指定 id 的文档记录
+   *
+   * 使用场景：indexing 失败时删除刚创建的 pending 文档，
+   * 使用户可以用相同文件名重新上传，不被重复文件名校验阻断。
+   *
+   * 为什么不用软删除（is_deleted 标记）：
+   * - MVP 阶段不需要回收站或审计日志，物理删除更简单。
+   * - 文档删除后 chunks.json 中对应的 chunk 也不存在（embedding 失败时不写入）；
+   *   不存在孤立外键问题。
+   *
+   * @param id  目标文档 id（不存在时静默忽略，保证幂等性）
+   */
+  remove(id: string): void {
+    const docs = this.findAll()
+    const filtered = docs.filter((d) => d.id !== id)
+    // 只有在确实找到并删除时才写文件，避免不必要的 I/O
+    if (filtered.length !== docs.length) {
+      fs.writeFileSync(DOCUMENTS_FILE, JSON.stringify(filtered, null, 2), 'utf-8')
+    }
+  }
 }
